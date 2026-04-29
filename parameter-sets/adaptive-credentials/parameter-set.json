@@ -1,0 +1,47 @@
+{
+    "meta": {
+        "label": "Adaptive Planning credentials",
+        "description": "Connection settings for the Workday Adaptive Planning API. Shared by every Adaptive connector and exporter in this plugin.",
+        "icon": "fas fa-lock"
+    },
+    "defaultDefinableInline": false,
+    "defaultDefinableAtProjectLevel": true,
+    "pluginParams": [],
+    "params": [
+        {
+            "name": "instance_code",
+            "label": "Instance code",
+            "type": "STRING",
+            "description": "Adaptive instance code, i.e. the part after '@' in your Adaptive login.",
+            "mandatory": true
+        },
+        {
+            "name": "username",
+            "label": "Username",
+            "type": "STRING",
+            "description": "Adaptive login (without the '@instance' suffix).",
+            "mandatory": true
+        },
+        {
+            "name": "password",
+            "label": "Password",
+            "type": "PASSWORD",
+            "description": "Adaptive password for the API user.",
+            "mandatory": true
+        },
+        {
+            "name": "api_version",
+            "label": "API version",
+            "type": "STRING",
+            "defaultValue": "v40",
+            "description": "Adaptive Planning XML API version (e.g. v40)."
+        },
+        {
+            "name": "base_url",
+            "label": "API base URL",
+            "type": "STRING",
+            "defaultValue": "https://api.adaptiveplanning.com/api",
+            "description": "Override only if your tenant uses a regional endpoint."
+        }
+    ]
+}

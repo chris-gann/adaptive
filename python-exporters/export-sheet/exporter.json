@@ -1,0 +1,58 @@
+{
+    "meta": {
+        "label": "Export Adaptive Sheet",
+        "description": "Push rows from a Dataiku dataset back into a Workday Adaptive Planning sheet.",
+        "icon": "fas fa-file-export"
+    },
+    "exportBehavior": "MANAGES_OUTPUT",
+    "paramsPythonSetup": "compute_sheet_choices.py",
+    "params": [
+        {
+            "name": "credentials",
+            "label": "Adaptive credentials",
+            "type": "PRESET",
+            "parameterSetId": "adaptive-credentials",
+            "mandatory": true
+        },
+        {
+            "name": "sheet",
+            "label": "Target sheet",
+            "type": "SELECT",
+            "description": "Loads dynamically from your Adaptive instance once credentials are set.",
+            "getChoicesFromPython": true,
+            "triggerParameters": ["credentials"],
+            "mandatory": true
+        },
+        {
+            "name": "version",
+            "label": "Adaptive version",
+            "type": "STRING",
+            "description": "Adaptive version name to write to. Leave empty to target the current working version."
+        },
+        {
+            "name": "mode",
+            "label": "Write mode",
+            "type": "SELECT",
+            "defaultValue": "REPLACE",
+            "selectChoices": [
+                {"value": "REPLACE", "label": "Replace existing rows"},
+                {"value": "APPEND", "label": "Append to existing rows"}
+            ],
+            "description": "Only honored for modeled sheets. Cube and standard imports follow Adaptive's additive merge semantics."
+        },
+        {
+            "name": "batch_size",
+            "label": "Batch size",
+            "type": "INT",
+            "defaultValue": 5000,
+            "description": "Rows per Adaptive API call. Lower this if you hit payload-size errors."
+        },
+        {
+            "name": "dry_run",
+            "label": "Dry run",
+            "type": "BOOLEAN",
+            "defaultValue": false,
+            "description": "Validate and log batches without actually pushing to Adaptive."
+        }
+    ]
+}

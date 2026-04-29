@@ -1,0 +1,14 @@
+{
+    "id": "adaptive-test",
+    "version": "0.0.1",
+    "meta": {
+        "label": "Workday Adaptive Planning",
+        "description": "Read sheet data from Workday Adaptive Planning into Dataiku datasets and write Dataiku datasets back into Adaptive sheets.",
+        "author": "chris.gannon",
+        "icon": "fas fa-chart-line",
+        "recipesCategory": "other",
+        "tags": ["FP&A", "Workday", "Adaptive Planning", "Connector"],
+        "url": "",
+        "licenseInfo": "Apache Software License"
+    }
+}

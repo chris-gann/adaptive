@@ -1,0 +1,35 @@
+{
+    "meta": {
+        "label": "Import Adaptive Sheet",
+        "description": "Read rows from a Workday Adaptive Planning sheet (modeled, cube, or standard) into a Dataiku dataset.",
+        "icon": "fas fa-file-import"
+    },
+    "readable": true,
+    "writable": false,
+    "supportAppend": false,
+    "paramsPythonSetup": "compute_sheet_choices.py",
+    "params": [
+        {
+            "name": "credentials",
+            "label": "Adaptive credentials",
+            "type": "PRESET",
+            "parameterSetId": "adaptive-credentials",
+            "mandatory": true
+        },
+        {
+            "name": "sheet",
+            "label": "Sheet",
+            "type": "SELECT",
+            "description": "Loads dynamically from your Adaptive instance once credentials are set.",
+            "getChoicesFromPython": true,
+            "triggerParameters": ["credentials"],
+            "mandatory": true
+        },
+        {
+            "name": "version",
+            "label": "Adaptive version",
+            "type": "STRING",
+            "description": "Adaptive version name to read from. Leave empty to use the current working version."
+        }
+    ]
+}
