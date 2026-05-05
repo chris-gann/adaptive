@@ -127,9 +127,11 @@ def export_rows(client, sheet, version=None, records_limit=-1):
 
 
 def _export_modeled(client, sheet, version=None, records_limit=-1):
-    body = [ET.Element("modeled-sheet", {"id": str(sheet["id"])})]
-    body.extend(_version_element(version))
-    root = client.post("exportConfigurableModelData", body)
+    job = ET.Element("job")
+    job.append(ET.Element("modeled-sheet", {"id": str(sheet["id"])}))
+    for v in _version_element(version):
+        job.append(v)
+    root = client.post("exportConfigurableModelData", [job])
     schema = get_sheet_schema(client, sheet)
     type_by_col = _column_index(schema)
     yielded = 0
@@ -192,7 +194,7 @@ def _export_cube(client, sheet, version=None, records_limit=-1):
             "timeRollups": "false",
         }),
     ]
-    root = client.post("exportCubeData", body)
+    root = client.post("exportData", body)
     yield from _yield_csv_output(root, records_limit=records_limit)
 
 
