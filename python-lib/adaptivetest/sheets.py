@@ -50,34 +50,31 @@ def list_sheets(client):
 
 
 def get_sheet_schema(client, sheet):
-    """Return DSS-shaped schema dict for the sheet.
+    """Return DSS-shaped schema dict for the sheet, or None to let DSS infer.
 
-    Modeled and cube sheets use exportSheetDefinition.
-    Standard / transaction sheets fall back to a generic schema since their
-    "columns" are really account/level/period/value coordinates.
+    Modeled and cube sheets have a real definition retrievable via
+    exportSheetDefinition. Standard / transaction sheets are exported as CSV
+    with column shapes (Account Name, Level Name, time periods, ...) that we
+    only know after parsing the response, so we return None and let DSS infer
+    from the first rows.
     """
     sheet_type = sheet.get("type")
-    if sheet_type in ("modeled", "cube"):
-        body = [ET.Element("sheet", {"ID": str(sheet["id"])})]
-        root = client.post("exportSheetDefinition", body)
-        columns = []
-        for col in root.iter("column"):
-            name = col.get("name") or col.get("code")
-            if not name:
-                continue
-            columns.append({
-                "name": name,
-                "type": adaptive_to_dss_type(col.get("type")),
-            })
-        if columns:
-            return {"columns": columns}
-    return {"columns": [
-        {"name": "account_code", "type": "string"},
-        {"name": "account_name", "type": "string"},
-        {"name": "level_code", "type": "string"},
-        {"name": "time_period", "type": "string"},
-        {"name": "value", "type": "double"},
-    ]}
+    if sheet_type not in ("modeled", "cube"):
+        return None
+    body = [ET.Element("sheet", {"ID": str(sheet["id"])})]
+    root = client.post("exportSheetDefinition", body)
+    columns = []
+    for col in root.iter("column"):
+        name = col.get("name") or col.get("code")
+        if not name:
+            continue
+        columns.append({
+            "name": name,
+            "type": adaptive_to_dss_type(col.get("type")),
+        })
+    if columns:
+        return {"columns": columns}
+    return None
 
 
 def _column_index(schema):
