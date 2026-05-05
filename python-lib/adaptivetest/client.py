@@ -88,7 +88,34 @@ class AdaptiveClient(object):
             )
         success = root.get("success")
         if success is not None and success != "1":
-            messages = [m.text or "" for m in root.iter("message") if (m.text or "").strip()]
-            detail = "; ".join(messages) or "Adaptive returned success=0"
+            detail = _extract_error_detail(root, response.content)
             raise AdaptiveError(detail, http_status=response.status_code, method=method)
         return root
+
+
+def _extract_error_detail(root, raw_body):
+    bits = []
+    for tag in ("message", "error", "fault"):
+        for el in root.iter(tag):
+            for attr in ("text", "message", "description", "value"):
+                v = el.get(attr)
+                if v and v.strip():
+                    bits.append(v.strip())
+            if (el.text or "").strip():
+                bits.append(el.text.strip())
+            for child in el:
+                if (child.text or "").strip():
+                    bits.append("{}={}".format(child.tag, child.text.strip()))
+    seen = set()
+    deduped = []
+    for b in bits:
+        if b not in seen:
+            seen.add(b)
+            deduped.append(b)
+    if deduped:
+        return "; ".join(deduped)
+    snippet = raw_body.decode("utf-8", errors="replace") if isinstance(raw_body, bytes) else str(raw_body)
+    snippet = snippet.strip().replace("\n", " ")
+    if len(snippet) > 800:
+        snippet = snippet[:800] + "..."
+    return "Adaptive returned success=0; raw response: {}".format(snippet)
