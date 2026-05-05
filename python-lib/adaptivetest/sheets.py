@@ -96,13 +96,21 @@ def _resolve_default_version(client):
     return candidates[0][1]
 
 
-def export_rows(client, sheet, version=None, records_limit=-1):
-    """Yield rows from the sheet as dicts keyed by column name."""
+def export_rows(client, sheet, version=None, records_limit=-1, cube_filters=None):
+    """Yield rows from the sheet as dicts keyed by column name.
+
+    cube_filters: only used when sheet["type"] == "cube". Dict with keys
+        accounts (list of codes), levels (list of codes), time_start (str),
+        time_end (str), dimensions (list of names — which dims to include in
+        the output columns).
+    """
     sheet_type = sheet.get("type")
     if sheet_type == "modeled":
         yield from _export_modeled(client, sheet, version=version, records_limit=records_limit)
     elif sheet_type == "cube":
-        yield from _export_cube(client, sheet, version=version, records_limit=records_limit)
+        yield from _export_cube(client, sheet, version=version,
+                                cube_filters=cube_filters or {},
+                                records_limit=records_limit)
     elif sheet_type in ("standard", "transaction"):
         yield from _export_data(client, sheet, version=version, records_limit=records_limit)
     else:
@@ -163,16 +171,77 @@ def _export_data(client, sheet, version=None, records_limit=-1):
     yield from _yield_csv_output(root, records_limit=records_limit)
 
 
-def _export_cube(client, sheet, version=None, records_limit=-1):
-    raise AdaptiveError(
-        "Cube sheets cannot be exported by sheet ID through Adaptive's XML API. "
-        "exportConfigurableModelData accepts only <modeled-sheet>, and "
-        "exportData's <filters> only accepts accounts / levels / dimensions / "
-        "time (not a cube reference). To pull cube data, query exportData "
-        "directly with explicit account or dimension filters in DSS, or pick a "
-        "modeled or standard sheet from the dropdown instead."
-    )
-    yield  # pragma: no cover  (keep generator semantics)
+def _export_cube(client, sheet, version=None, cube_filters=None, records_limit=-1):
+    cube_filters = cube_filters or {}
+    accounts = [a for a in (cube_filters.get("accounts") or []) if a]
+    levels = [l for l in (cube_filters.get("levels") or []) if l]
+    time_start = (cube_filters.get("time_start") or "").strip()
+    time_end = (cube_filters.get("time_end") or "").strip()
+    dimensions = [d for d in (cube_filters.get("dimensions") or []) if d]
+
+    missing = []
+    if not accounts:
+        missing.append("accounts")
+    if not levels:
+        missing.append("levels")
+    if not time_start or not time_end:
+        missing.append("time span (start and end)")
+    if missing:
+        raise AdaptiveError(
+            "Cube sheet export requires {}. Set them on the dataset config.".format(
+                ", ".join(missing)
+            )
+        )
+
+    if not version:
+        version = _resolve_default_version(client)
+
+    body = [
+        ET.Element("version", {"name": str(version)}),
+        ET.Element("format", {
+            "useInternalCodes": "true",
+            "includeUnmappedItems": "false",
+            "displayNameEnabled": "false",
+            "includeCodes": "true",
+            "includeNames": "true",
+        }),
+    ]
+
+    filters = ET.Element("filters")
+    accounts_el = ET.SubElement(filters, "accounts")
+    for code in accounts:
+        ET.SubElement(accounts_el, "account", {
+            "code": code,
+            "isAssumption": "0",
+            "includeDescendants": "true",
+        })
+    levels_el = ET.SubElement(filters, "levels")
+    for code in levels:
+        ET.SubElement(levels_el, "level", {
+            "code": code,
+            "isRollup": "0",
+            "includeDescendants": "true",
+        })
+    ET.SubElement(filters, "timeSpan", {"start": time_start, "end": time_end})
+    body.append(filters)
+
+    if dimensions:
+        dims_el = ET.Element("dimensions")
+        for d in dimensions:
+            ET.SubElement(dims_el, "dimension", {"name": d})
+        body.append(dims_el)
+
+    body.append(ET.Element("rules", {
+        "includeRollupAccounts": "false",
+        "includeRollupLevels": "false",
+        "includeZeroRows": "false",
+        "markBlanks": "false",
+        "markInvalidValues": "false",
+        "timeRollups": "false",
+    }))
+
+    root = client.post("exportData", body)
+    yield from _yield_csv_output(root, records_limit=records_limit)
 
 
 def _yield_csv_output(root, records_limit=-1, data_path="output"):

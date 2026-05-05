@@ -29,7 +29,55 @@
             "name": "version",
             "label": "Adaptive version",
             "type": "STRING",
-            "description": "Adaptive version name to read from. Leave empty to use the current working version."
+            "description": "Adaptive version name. Leave empty to auto-resolve to the default version."
+        },
+        {
+            "name": "cube_section",
+            "label": "Cube sheet filters",
+            "type": "SEPARATOR",
+            "description": "Cube exports require explicit account, level, and time-span filters. The dropdowns below load from your Adaptive instance.",
+            "visibilityCondition": "model.sheet && model.sheet.indexOf('cube:') === 0"
+        },
+        {
+            "name": "accounts",
+            "label": "Accounts",
+            "type": "MULTISELECT",
+            "description": "Accounts to include. Descendants are included automatically.",
+            "getChoicesFromPython": true,
+            "triggerParameters": ["credentials"],
+            "visibilityCondition": "model.sheet && model.sheet.indexOf('cube:') === 0"
+        },
+        {
+            "name": "levels",
+            "label": "Levels",
+            "type": "MULTISELECT",
+            "description": "Levels to include. Descendants are included automatically.",
+            "getChoicesFromPython": true,
+            "triggerParameters": ["credentials"],
+            "visibilityCondition": "model.sheet && model.sheet.indexOf('cube:') === 0"
+        },
+        {
+            "name": "time_start",
+            "label": "Time start",
+            "type": "STRING",
+            "description": "Adaptive time period code, e.g. 01/2024 or Jan-24.",
+            "visibilityCondition": "model.sheet && model.sheet.indexOf('cube:') === 0"
+        },
+        {
+            "name": "time_end",
+            "label": "Time end",
+            "type": "STRING",
+            "description": "Adaptive time period code, e.g. 12/2024 or Dec-24.",
+            "visibilityCondition": "model.sheet && model.sheet.indexOf('cube:') === 0"
+        },
+        {
+            "name": "dimensions",
+            "label": "Dimensions in output",
+            "type": "MULTISELECT",
+            "description": "Optional. Dimensions to include as columns in the exported rows.",
+            "getChoicesFromPython": true,
+            "triggerParameters": ["credentials"],
+            "visibilityCondition": "model.sheet && model.sheet.indexOf('cube:') === 0"
         }
     ]
 }

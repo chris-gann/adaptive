@@ -38,6 +38,13 @@ class AdaptiveSheetConnector(Connector):
         self._client = AdaptiveClient.from_preset(self.config.get("credentials") or {})
         self._sheet = _resolve_sheet(self._client, sheet_type, sheet_id)
         self._version = (self.config.get("version") or "").strip() or None
+        self._cube_filters = {
+            "accounts": self.config.get("accounts") or [],
+            "levels": self.config.get("levels") or [],
+            "dimensions": self.config.get("dimensions") or [],
+            "time_start": (self.config.get("time_start") or "").strip(),
+            "time_end": (self.config.get("time_end") or "").strip(),
+        } if sheet_type == "cube" else None
 
     def get_read_schema(self):
         try:
@@ -49,7 +56,9 @@ class AdaptiveSheetConnector(Connector):
     def generate_rows(self, dataset_schema=None, dataset_partitioning=None,
                       partition_id=None, records_limit=-1):
         for row in export_rows(self._client, self._sheet,
-                               version=self._version, records_limit=records_limit):
+                               version=self._version,
+                               records_limit=records_limit,
+                               cube_filters=self._cube_filters):
             yield row
 
     def get_writer(self, dataset_schema=None, dataset_partitioning=None,
