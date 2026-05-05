@@ -164,26 +164,38 @@ def _export_data(client, sheet, version=None, records_limit=-1):
 
 
 def _export_cube(client, sheet, version=None, records_limit=-1):
-    if not version:
-        version = _resolve_default_version(client)
-    body = [
-        ET.Element("version", {"name": str(version)}),
-        _configurable_sheet_element("cube-sheet", sheet),
-    ]
-    root = client.post("exportConfigurableModelData", body)
-    yield from _yield_csv_output(root, records_limit=records_limit, data_path="output/data")
+    raise AdaptiveError(
+        "Cube sheets cannot be exported by sheet ID through Adaptive's XML API. "
+        "exportConfigurableModelData accepts only <modeled-sheet>, and "
+        "exportData's <filters> only accepts accounts / levels / dimensions / "
+        "time (not a cube reference). To pull cube data, query exportData "
+        "directly with explicit account or dimension filters in DSS, or pick a "
+        "modeled or standard sheet from the dropdown instead."
+    )
+    yield  # pragma: no cover  (keep generator semantics)
 
 
 def _yield_csv_output(root, records_limit=-1, data_path="output"):
+    """Find the first CSV-bearing element in the response and yield rows.
+
+    Adaptive's exportData and exportConfigurableModelData responses both
+    deliver CSV inside a text node, but the wrapping element varies across
+    API versions and methods (sometimes <output>, sometimes <output>/<data>,
+    sometimes inside a wrapper that has nested elements alongside the text).
+    Try the explicit hint first, then fall back to scanning every element
+    whose text looks like CSV. If nothing CSV-shaped is present, raise so
+    the caller can see what Adaptive actually returned instead of silently
+    yielding zero rows.
+    """
     import csv
     import io
 
-    el = root.find(data_path)
-    if el is None or el.text is None:
-        return
-    text = el.text.strip("\n").strip()
-    if not text:
-        return
+    text = _find_csv_text(root, data_path)
+    if text is None:
+        raise AdaptiveError(
+            "Adaptive returned success but no CSV data was found in the "
+            "response. Raw response: {}".format(_truncate_xml(root))
+        )
     reader = csv.DictReader(io.StringIO(text), lineterminator="\n")
     yielded = 0
     for row in reader:
@@ -191,6 +203,38 @@ def _yield_csv_output(root, records_limit=-1, data_path="output"):
         yielded += 1
         if 0 < records_limit <= yielded:
             return
+
+
+def _truncate_xml(root, limit=1500):
+    raw = ET.tostring(root, encoding="unicode")
+    if len(raw) > limit:
+        return raw[:limit] + "...(truncated)"
+    return raw
+
+
+def _find_csv_text(root, hint_path):
+    candidates = []
+    if hint_path:
+        el = root.find(hint_path)
+        if el is not None:
+            candidates.append(el)
+    candidates.append(root.find("output"))
+    candidates.extend(root.iter())
+    seen = set()
+    for el in candidates:
+        if el is None or id(el) in seen:
+            continue
+        seen.add(id(el))
+        if el.text is None:
+            continue
+        text = el.text.strip("\n").strip()
+        if not text or "," not in text:
+            continue
+        first_line = text.splitlines()[0]
+        if "," not in first_line:
+            continue
+        return text
+    return None
 
 
 def import_rows(client, sheet, schema, rows, version=None, mode="REPLACE", batch_size=5000, dry_run=False):
