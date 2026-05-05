@@ -90,6 +90,30 @@ def _version_element(version):
     return []
 
 
+def _resolve_default_version(client):
+    """Return the default version name as configured in the Adaptive instance.
+
+    Adaptive's exportData requires <version>; we call exportVersions and pick
+    the version flagged default, falling back to the first version we find.
+    """
+    root = client.post("exportVersions")
+    candidates = []
+    for el in root.iter():
+        if "version" not in el.tag.lower():
+            continue
+        name = el.get("name")
+        if not name:
+            continue
+        is_default = (el.get("isDefaultVersion") or el.get("isDefault") or "").lower() in ("1", "true")
+        candidates.append((is_default, name))
+    if not candidates:
+        raise AdaptiveError(
+            "No versions returned by exportVersions; specify a version explicitly in the dataset config"
+        )
+    candidates.sort(key=lambda c: 0 if c[0] else 1)
+    return candidates[0][1]
+
+
 def export_rows(client, sheet, version=None, records_limit=-1):
     """Yield rows from the sheet as dicts keyed by column name."""
     sheet_type = sheet.get("type")
@@ -127,14 +151,22 @@ def _export_modeled(client, sheet, version=None, records_limit=-1):
 
 
 def _export_data(client, sheet, version=None, records_limit=-1):
-    body = list(_version_element(version))
+    if not version:
+        version = _resolve_default_version(client)
+    body = [ET.Element("version", {"name": str(version)})]
     body.append(ET.Element("format", {
         "useInternalCodes": "true",
         "includeUnmappedItems": "false",
         "displayNameEnabled": "false",
     }))
-    rules = ET.Element("rules", {"includeRollups": "false", "includeZeroRows": "false"})
-    body.append(rules)
+    body.append(ET.Element("rules", {
+        "includeRollupAccounts": "false",
+        "includeRollupLevels": "false",
+        "includeZeroRows": "false",
+        "markBlanks": "false",
+        "markInvalidValues": "false",
+        "timeRollups": "false",
+    }))
     if sheet.get("type") == "cube":
         filters = ET.Element("filters")
         ET.SubElement(filters, "cubeSheet", {"ID": str(sheet["id"])})
