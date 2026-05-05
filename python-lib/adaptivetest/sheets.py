@@ -50,30 +50,13 @@ def list_sheets(client):
 
 
 def get_sheet_schema(client, sheet):
-    """Return DSS-shaped schema dict for the sheet, or None to let DSS infer.
+    """Return None so Dataiku infers the schema from the first rows.
 
-    Modeled and cube sheets have a real definition retrievable via
-    exportSheetDefinition. Standard / transaction sheets are exported as CSV
-    with column shapes (Account Name, Level Name, time periods, ...) that we
-    only know after parsing the response, so we return None and let DSS infer
-    from the first rows.
+    For all sheet types Adaptive's export response is CSV; we don't have a
+    reliable schema-pre-fetch path that lines up with the column names the
+    CSV actually emits, so it's safer to let DSS infer column types from the
+    yielded rows than to declare a schema that may not match.
     """
-    sheet_type = sheet.get("type")
-    if sheet_type not in ("modeled", "cube"):
-        return None
-    body = [ET.Element("{}-sheet".format(sheet_type), {"id": str(sheet["id"])})]
-    root = client.post("exportSheetDefinition", body)
-    columns = []
-    for col in root.iter("column"):
-        name = col.get("name") or col.get("code")
-        if not name:
-            continue
-        columns.append({
-            "name": name,
-            "type": adaptive_to_dss_type(col.get("type")),
-        })
-    if columns:
-        return {"columns": columns}
     return None
 
 
@@ -126,31 +109,37 @@ def export_rows(client, sheet, version=None, records_limit=-1):
         raise AdaptiveError("Unsupported sheet type: {}".format(sheet_type))
 
 
+_CONFIGURABLE_SHEET_DEFAULTS = {
+    "isGlobal": "false",
+    "includeAllColumns": "true",
+    "isGetAllRows": "true",
+    "useNumericIDs": "false",
+    # Adaptive's schema has a typo here ("diplsay" rather than "display"); the
+    # parser rejects the corrected spelling.
+    "diplsayNameEnabled": "true",
+    "includeCodes": "true",
+    "includeNames": "true",
+    "includeDisplayNames": "false",
+    "useAccountPrecision": "false",
+    "useActualValue": "false",
+}
+
+
+def _configurable_sheet_element(tag, sheet):
+    attrs = {"name": sheet.get("name") or sheet.get("code") or str(sheet["id"])}
+    attrs.update(_CONFIGURABLE_SHEET_DEFAULTS)
+    return ET.Element(tag, attrs)
+
+
 def _export_modeled(client, sheet, version=None, records_limit=-1):
-    job = ET.Element("job")
-    job.append(ET.Element("modeled-sheet", {"id": str(sheet["id"])}))
-    for v in _version_element(version):
-        job.append(v)
-    root = client.post("exportConfigurableModelData", [job])
-    schema = get_sheet_schema(client, sheet)
-    type_by_col = _column_index(schema)
-    yielded = 0
-    for row_el in root.iter("row"):
-        row = {}
-        for col_el in row_el.findall("column"):
-            name = col_el.get("name") or col_el.get("code")
-            if not name:
-                continue
-            row[name] = coerce_value(
-                col_el.get("value") if col_el.get("value") is not None else (col_el.text or ""),
-                type_by_col.get(name, "string"),
-            )
-        if not row:
-            continue
-        yield row
-        yielded += 1
-        if 0 < records_limit <= yielded:
-            return
+    if not version:
+        version = _resolve_default_version(client)
+    body = [
+        ET.Element("version", {"name": str(version)}),
+        _configurable_sheet_element("modeled-sheet", sheet),
+    ]
+    root = client.post("exportConfigurableModelData", body)
+    yield from _yield_csv_output(root, records_limit=records_limit, data_path="output/data")
 
 
 def _export_data(client, sheet, version=None, records_limit=-1):
@@ -179,41 +168,23 @@ def _export_cube(client, sheet, version=None, records_limit=-1):
         version = _resolve_default_version(client)
     body = [
         ET.Element("version", {"name": str(version)}),
-        ET.Element("cube-sheet", {"id": str(sheet["id"])}),
-        ET.Element("format", {
-            "useInternalCodes": "true",
-            "includeUnmappedItems": "false",
-            "displayNameEnabled": "false",
-        }),
-        ET.Element("rules", {
-            "includeRollupAccounts": "false",
-            "includeRollupLevels": "false",
-            "includeZeroRows": "false",
-            "markBlanks": "false",
-            "markInvalidValues": "false",
-            "timeRollups": "false",
-        }),
+        _configurable_sheet_element("cube-sheet", sheet),
     ]
-    root = client.post("exportData", body)
-    yield from _yield_csv_output(root, records_limit=records_limit)
+    root = client.post("exportConfigurableModelData", body)
+    yield from _yield_csv_output(root, records_limit=records_limit, data_path="output/data")
 
 
-def _yield_csv_output(root, records_limit=-1):
-    import base64
+def _yield_csv_output(root, records_limit=-1, data_path="output"):
     import csv
     import io
 
-    output_el = root.find(".//output")
-    if output_el is None:
+    el = root.find(data_path)
+    if el is None or el.text is None:
         return
-    text = (output_el.text or "").strip()
+    text = el.text.strip("\n").strip()
     if not text:
         return
-    try:
-        decoded = base64.b64decode(text).decode("utf-8", errors="replace")
-    except Exception:
-        decoded = text
-    reader = csv.DictReader(io.StringIO(decoded))
+    reader = csv.DictReader(io.StringIO(text), lineterminator="\n")
     yielded = 0
     for row in reader:
         yield {k: coerce_value(v, "string") for k, v in row.items()}
