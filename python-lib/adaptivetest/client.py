@@ -86,8 +86,8 @@ class AdaptiveClient(object):
                 http_status=response.status_code,
                 method=method,
             )
-        success = root.get("success")
-        if success is not None and success != "1":
+        success = (root.get("success") or "").strip().lower()
+        if success and success not in ("1", "true"):
             detail = _extract_error_detail(root, response.content)
             raise AdaptiveError(detail, http_status=response.status_code, method=method)
         return root

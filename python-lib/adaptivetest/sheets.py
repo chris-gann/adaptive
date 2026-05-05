@@ -9,20 +9,39 @@ logger = logging.getLogger(__name__)
 SUPPORTED_TYPES = ("modeled", "cube", "standard", "transaction")
 
 
+_SHEET_TAG_SUFFIX = "-sheet"
+
+
+def _sheet_type_from_tag(tag):
+    if tag == "sheet":
+        return ""
+    if tag.endswith(_SHEET_TAG_SUFFIX):
+        return tag[: -len(_SHEET_TAG_SUFFIX)].lower()
+    return ""
+
+
 def list_sheets(client):
     """Return every sheet visible to the credentials.
+
+    Adaptive returns one element per sheet, with the type encoded in the tag
+    name (e.g. <standard-sheet>, <cube-sheet>, <modeled-sheet>).
 
     Each item: {"id": str, "type": str, "code": str, "name": str}.
     """
     root = client.post("exportSheets")
     sheets = []
-    for el in root.iter("sheet"):
+    for el in root.iter():
+        sheet_type = _sheet_type_from_tag(el.tag)
+        explicit_type = (el.get("type") or "").lower()
+        sheet_type = sheet_type or explicit_type
+        if not sheet_type and el.tag != "sheet":
+            continue
         sheet_id = el.get("id") or el.get("ID")
         if not sheet_id:
             continue
         sheets.append({
             "id": str(sheet_id),
-            "type": (el.get("type") or "").lower(),
+            "type": sheet_type,
             "code": el.get("code") or "",
             "name": el.get("name") or el.get("code") or sheet_id,
         })
