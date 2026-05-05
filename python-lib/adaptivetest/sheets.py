@@ -61,7 +61,7 @@ def get_sheet_schema(client, sheet):
     sheet_type = sheet.get("type")
     if sheet_type not in ("modeled", "cube"):
         return None
-    body = [ET.Element("sheet", {"ID": str(sheet["id"])})]
+    body = [ET.Element("{}-sheet".format(sheet_type), {"id": str(sheet["id"])})]
     root = client.post("exportSheetDefinition", body)
     columns = []
     for col in root.iter("column"):
@@ -78,6 +78,8 @@ def get_sheet_schema(client, sheet):
 
 
 def _column_index(schema):
+    if not schema:
+        return {}
     return {col["name"]: col.get("type", "string") for col in schema.get("columns", [])}
 
 
@@ -116,14 +118,16 @@ def export_rows(client, sheet, version=None, records_limit=-1):
     sheet_type = sheet.get("type")
     if sheet_type == "modeled":
         yield from _export_modeled(client, sheet, version=version, records_limit=records_limit)
-    elif sheet_type in ("cube", "standard", "transaction"):
+    elif sheet_type == "cube":
+        yield from _export_cube(client, sheet, version=version, records_limit=records_limit)
+    elif sheet_type in ("standard", "transaction"):
         yield from _export_data(client, sheet, version=version, records_limit=records_limit)
     else:
         raise AdaptiveError("Unsupported sheet type: {}".format(sheet_type))
 
 
 def _export_modeled(client, sheet, version=None, records_limit=-1):
-    body = [ET.Element("modeledSheet", {"ID": str(sheet["id"])})]
+    body = [ET.Element("modeled-sheet", {"id": str(sheet["id"])})]
     body.extend(_version_element(version))
     root = client.post("exportConfigurableModelData", body)
     schema = get_sheet_schema(client, sheet)
@@ -164,26 +168,51 @@ def _export_data(client, sheet, version=None, records_limit=-1):
         "markInvalidValues": "false",
         "timeRollups": "false",
     }))
-    if sheet.get("type") == "cube":
-        filters = ET.Element("filters")
-        ET.SubElement(filters, "cubeSheet", {"ID": str(sheet["id"])})
-        body.append(filters)
     root = client.post("exportData", body)
-    yielded = 0
-    output_text = None
-    output_el = root.find(".//output")
-    if output_el is not None:
-        output_text = (output_el.text or "").strip()
-    if not output_text:
-        return
+    yield from _yield_csv_output(root, records_limit=records_limit)
+
+
+def _export_cube(client, sheet, version=None, records_limit=-1):
+    if not version:
+        version = _resolve_default_version(client)
+    body = [
+        ET.Element("version", {"name": str(version)}),
+        ET.Element("cube-sheet", {"id": str(sheet["id"])}),
+        ET.Element("format", {
+            "useInternalCodes": "true",
+            "includeUnmappedItems": "false",
+            "displayNameEnabled": "false",
+        }),
+        ET.Element("rules", {
+            "includeRollupAccounts": "false",
+            "includeRollupLevels": "false",
+            "includeZeroRows": "false",
+            "markBlanks": "false",
+            "markInvalidValues": "false",
+            "timeRollups": "false",
+        }),
+    ]
+    root = client.post("exportCubeData", body)
+    yield from _yield_csv_output(root, records_limit=records_limit)
+
+
+def _yield_csv_output(root, records_limit=-1):
     import base64
-    try:
-        decoded = base64.b64decode(output_text).decode("utf-8", errors="replace")
-    except Exception:
-        decoded = output_text
     import csv
     import io
+
+    output_el = root.find(".//output")
+    if output_el is None:
+        return
+    text = (output_el.text or "").strip()
+    if not text:
+        return
+    try:
+        decoded = base64.b64decode(text).decode("utf-8", errors="replace")
+    except Exception:
+        decoded = text
     reader = csv.DictReader(io.StringIO(decoded))
+    yielded = 0
     for row in reader:
         yield {k: coerce_value(v, "string") for k, v in row.items()}
         yielded += 1
@@ -239,21 +268,21 @@ def _flush_batch(client, method, sheet, schema, rows, version, mode, container_t
 def _import_modeled(client, sheet, schema, rows, version, mode, batch_size, dry_run):
     return _drain(rows, batch_size, lambda batch: _flush_batch(
         client, "importConfigurableModelData", sheet, schema, batch, version, mode,
-        "modeledSheet", {"ID": str(sheet["id"])}, dry_run,
+        "modeled-sheet", {"id": str(sheet["id"])}, dry_run,
     ))
 
 
 def _import_cube(client, sheet, schema, rows, version, batch_size, dry_run):
     return _drain(rows, batch_size, lambda batch: _flush_batch(
         client, "importCubeData", sheet, schema, batch, version, None,
-        "cubeSheet", {"ID": str(sheet["id"])}, dry_run,
+        "cube-sheet", {"id": str(sheet["id"])}, dry_run,
     ))
 
 
 def _import_standard(client, sheet, schema, rows, version, batch_size, dry_run):
     return _drain(rows, batch_size, lambda batch: _flush_batch(
         client, "importStandardData", sheet, schema, batch, version, None,
-        "standardSheet", {"ID": str(sheet["id"])}, dry_run,
+        "standard-sheet", {"id": str(sheet["id"])}, dry_run,
     ))
 
 
