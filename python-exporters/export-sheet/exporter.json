@@ -5,6 +5,10 @@
         "icon": "fas fa-file-export"
     },
     "exportBehavior": "MANAGES_OUTPUT",
+    "kind": "PYTHON",
+    "exportOptions": [
+        {"label": "Workday Adaptive Planning"}
+    ],
     "paramsPythonSetup": "compute_sheet_choices.py",
     "params": [
         {
