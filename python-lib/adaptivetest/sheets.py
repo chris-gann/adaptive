@@ -124,11 +124,11 @@ _CONFIGURABLE_SHEET_DEFAULTS = {
     "isGetAllRows": "true",
     "useNumericIDs": "false",
     # Adaptive's schema has a typo here ("diplsay" rather than "display"); the
-    # parser rejects the corrected spelling.
-    "diplsayNameEnabled": "true",
-    "includeCodes": "true",
-    "includeNames": "true",
-    "includeDisplayNames": "false",
+    # parser rejects the corrected spelling. Keep it false so the response
+    # works regardless of whether the sheet itself has display names enabled
+    # — when it is true, the include* attrs become required, and they're
+    # rejected on sheets that have display names disabled.
+    "diplsayNameEnabled": "false",
     "useAccountPrecision": "false",
     "useActualValue": "false",
 }
