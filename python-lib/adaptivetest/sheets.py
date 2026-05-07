@@ -39,11 +39,13 @@ def list_sheets(client):
         sheet_id = el.get("id") or el.get("ID")
         if not sheet_id:
             continue
+        is_global = (el.get("isGlobal") or "").strip()
         sheets.append({
             "id": str(sheet_id),
             "type": sheet_type,
             "code": el.get("code") or "",
             "name": el.get("name") or el.get("code") or sheet_id,
+            "is_global": is_global in ("1", "true", "True"),
         })
     sheets.sort(key=lambda s: (s["type"], s["name"].lower()))
     return sheets
@@ -118,7 +120,6 @@ def export_rows(client, sheet, version=None, records_limit=-1, cube_filters=None
 
 
 _CONFIGURABLE_SHEET_DEFAULTS = {
-    "isGlobal": "false",
     "includeAllColumns": "true",
     "isGetAllRows": "true",
     "useNumericIDs": "false",
@@ -134,7 +135,10 @@ _CONFIGURABLE_SHEET_DEFAULTS = {
 
 
 def _configurable_sheet_element(tag, sheet):
-    attrs = {"name": sheet.get("name") or sheet.get("code") or str(sheet["id"])}
+    attrs = {
+        "name": sheet.get("name") or sheet.get("code") or str(sheet["id"]),
+        "isGlobal": "true" if sheet.get("is_global") else "false",
+    }
     attrs.update(_CONFIGURABLE_SHEET_DEFAULTS)
     return ET.Element(tag, attrs)
 
@@ -249,12 +253,10 @@ def _yield_csv_output(root, records_limit=-1, data_path="output"):
 
     Adaptive's exportData and exportConfigurableModelData responses both
     deliver CSV inside a text node, but the wrapping element varies across
-    API versions and methods (sometimes <output>, sometimes <output>/<data>,
-    sometimes inside a wrapper that has nested elements alongside the text).
-    Try the explicit hint first, then fall back to scanning every element
-    whose text looks like CSV. If nothing CSV-shaped is present, raise so
-    the caller can see what Adaptive actually returned instead of silently
-    yielding zero rows.
+    API versions and methods. Try the explicit hint first, then fall back
+    to scanning every element whose text looks like a multi-line, multi-
+    column CSV with at least one data row. If nothing usable is present,
+    raise with the raw response so the caller can see what came back.
     """
     import csv
     import io
@@ -274,7 +276,7 @@ def _yield_csv_output(root, records_limit=-1, data_path="output"):
             return
 
 
-def _truncate_xml(root, limit=1500):
+def _truncate_xml(root, limit=2000):
     raw = ET.tostring(root, encoding="unicode")
     if len(raw) > limit:
         return raw[:limit] + "...(truncated)"
@@ -296,13 +298,16 @@ def _find_csv_text(root, hint_path):
         seen.add(id(el))
         if el.text is None:
             continue
-        text = el.text.strip("\n").strip()
-        if not text or "," not in text:
+        text = el.text.strip()
+        if not text:
             continue
-        first_line = text.splitlines()[0]
-        if "," not in first_line:
+        lines = [line for line in text.splitlines() if line.strip()]
+        if len(lines) < 2:
             continue
-        return text
+        first_line = lines[0]
+        if first_line.count(",") < 1:
+            continue
+        return "\n".join(lines)
     return None
 
 
