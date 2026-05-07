@@ -17,7 +17,7 @@ def do(payload, config, plugin_config, inputs):
     try:
         client = AdaptiveClient.from_preset(creds)
         if name == "sheet":
-            return _sheet_choices(client)
+            return _sheet_choices(client, (config.get("sheet_type") or "").lower())
         if name in ("accounts", "levels", "dimensions"):
             return _metadata_choices(client, name)
     except AdaptiveError as exc:
@@ -27,15 +27,16 @@ def do(payload, config, plugin_config, inputs):
     return {"choices": []}
 
 
-def _sheet_choices(client):
+def _sheet_choices(client, sheet_type):
     sheets = list_sheets(client)
+    if sheet_type:
+        sheets = [s for s in sheets if s["type"] == sheet_type]
     if not sheets:
-        return {"choices": [{"value": "", "label": "No sheets found in this instance"}]}
+        return {"choices": [{"value": "", "label": "No {} sheets found".format(sheet_type or "")}]}
     return {"choices": [
         {
             "value": "{}:{}".format(s["type"], s["id"]),
             "label": "{} ({})".format(s["name"], s["code"] or s["id"]),
-            "group": s["type"].title() if s["type"] else "Other",
         }
         for s in sheets
     ]}

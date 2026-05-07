@@ -17,12 +17,26 @@
             "mandatory": true
         },
         {
+            "name": "sheet_type",
+            "label": "Sheet type",
+            "type": "SELECT",
+            "description": "Pick the kind of Adaptive sheet you want to read.",
+            "defaultValue": "modeled",
+            "selectChoices": [
+                {"value": "modeled", "label": "Modeled"},
+                {"value": "cube", "label": "Cube"},
+                {"value": "standard", "label": "Standard"},
+                {"value": "transaction", "label": "Transaction"}
+            ],
+            "mandatory": true
+        },
+        {
             "name": "sheet",
             "label": "Sheet",
             "type": "SELECT",
-            "description": "Loads dynamically from your Adaptive instance once credentials are set.",
+            "description": "Loads dynamically from your Adaptive instance once credentials and sheet type are set.",
             "getChoicesFromPython": true,
-            "triggerParameters": ["credentials"],
+            "triggerParameters": ["credentials", "sheet_type"],
             "mandatory": true
         },
         {
@@ -38,7 +52,7 @@
             "description": "Accounts to include. Descendants are included automatically.",
             "getChoicesFromPython": true,
             "triggerParameters": ["credentials"],
-            "visibilityCondition": "model.sheet && model.sheet.indexOf('cube:') == 0"
+            "visibilityCondition": "model.sheet_type == 'cube'"
         },
         {
             "name": "levels",
@@ -47,21 +61,21 @@
             "description": "Levels to include. Descendants are included automatically.",
             "getChoicesFromPython": true,
             "triggerParameters": ["credentials"],
-            "visibilityCondition": "model.sheet && model.sheet.indexOf('cube:') == 0"
+            "visibilityCondition": "model.sheet_type == 'cube'"
         },
         {
             "name": "time_start",
             "label": "Time start",
             "type": "STRING",
             "description": "Adaptive time period code, e.g. 01/2024 or Jan-24.",
-            "visibilityCondition": "model.sheet && model.sheet.indexOf('cube:') == 0"
+            "visibilityCondition": "model.sheet_type == 'cube'"
         },
         {
             "name": "time_end",
             "label": "Time end",
             "type": "STRING",
             "description": "Adaptive time period code, e.g. 12/2024 or Dec-24.",
-            "visibilityCondition": "model.sheet && model.sheet.indexOf('cube:') == 0"
+            "visibilityCondition": "model.sheet_type == 'cube'"
         },
         {
             "name": "dimensions",
@@ -70,7 +84,7 @@
             "description": "Optional. Dimensions to include as columns in the exported rows.",
             "getChoicesFromPython": true,
             "triggerParameters": ["credentials"],
-            "visibilityCondition": "model.sheet && model.sheet.indexOf('cube:') == 0"
+            "visibilityCondition": "model.sheet_type == 'cube'"
         }
     ]
 }
